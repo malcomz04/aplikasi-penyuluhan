@@ -1,31 +1,62 @@
 FROM php:8.2-apache
 
-# 1. Install ekstensi PHP & dependensi sistem
+# Install dependency sistem & ekstensi PHP
 RUN apt-get update && apt-get install -y \
-    git zip unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
-    && docker-php-ext-install pdo_mysql zip gd mbstring \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    git \
+    zip \
+    unzip \
+    libzip-dev \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    && docker-php-ext-install \
+        pdo_mysql \
+        zip \
+        gd \
+        mbstring \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Pastikan MPM Prefork aktif & matikan MPM lain secara bersih
-RUN a2dismod mpm_event mpm_worker || true \
-    && a2enmod mpm_prefork rewrite
+# Pastikan hanya MPM prefork yang aktif
+RUN a2dismod mpm_event mpm_worker mpm_prefork 2>/dev/null || true \
+    && rm -f /etc/apache2/mods-enabled/mpm_*.load \
+    && rm -f /etc/apache2/mods-enabled/mpm_*.conf \
+    && a2enmod mpm_prefork \
+    && a2enmod rewrite
 
-# 3. Ubah DocumentRoot Apache ke folder public (untuk Framework)
-ENV APACHE_DOCUMENT_ROOT /var/www/html/public
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+# Set DocumentRoot Laravel ke /public
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
-# 4. Atur direktori kerja dan salin kode project
+RUN sed -ri \
+    -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
+    /etc/apache2/sites-available/000-default.conf \
+    /etc/apache2/sites-available/default-ssl.conf
+
+# Konfigurasi Apache Directory
+RUN printf '<Directory /var/www/html/public>\n\
+    AllowOverride All\n\
+    Require all granted\n\
+</Directory>\n' > /etc/apache2/conf-available/laravel.conf \
+    && a2enconf laravel
+
+# Workdir
 WORKDIR /var/www/html
+
+# Copy source code
 COPY . .
 
-# 5. Install Composer dependensi
+# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --optimize-autoloader
 
-# 6. Atur hak akses direktori storage dan cache
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction
+
+# Permission Laravel
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+    && chmod -R 775 /var/www/html/storage \
+    && chmod -R 775 /var/www/html/bootstrap/cache
 
 EXPOSE 80
 
