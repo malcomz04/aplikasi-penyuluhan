@@ -17,35 +17,30 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Pastikan hanya MPM prefork yang aktif
-RUN a2dismod mpm_event mpm_worker mpm_prefork 2>/dev/null || true \
-    && rm -f /etc/apache2/mods-enabled/mpm_*.load \
-    && rm -f /etc/apache2/mods-enabled/mpm_*.conf \
-    && a2enmod mpm_prefork \
-    && a2enmod rewrite
+# Laravel membutuhkan rewrite
+RUN a2enmod rewrite
 
-# Set DocumentRoot Laravel ke /public
+# DocumentRoot Laravel
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
 RUN sed -ri \
     -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
-    /etc/apache2/sites-available/000-default.conf \
-    /etc/apache2/sites-available/default-ssl.conf
+    /etc/apache2/sites-available/000-default.conf
 
-# Konfigurasi Apache Directory
+# Izinkan Laravel .htaccess
 RUN printf '<Directory /var/www/html/public>\n\
     AllowOverride All\n\
     Require all granted\n\
-</Directory>\n' > /etc/apache2/conf-available/laravel.conf \
+</Directory>\n' \
+    > /etc/apache2/conf-available/laravel.conf \
     && a2enconf laravel
 
-# Workdir
 WORKDIR /var/www/html
 
-# Copy source code
+# Copy Laravel
 COPY . .
 
-# Install Composer
+# Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 RUN composer install \
@@ -53,7 +48,7 @@ RUN composer install \
     --optimize-autoloader \
     --no-interaction
 
-# Permission Laravel
+# Permission
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
