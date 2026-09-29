@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y \
     git zip unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
     && docker-php-ext-install pdo_mysql zip gd mbstring
 
-RUN a2dismod mpm_event && a2enmod mpm_prefork rewrite
+RUN a2dismod mpm_event mpm_worker && a2enmod mpm_prefork rewrite
 
 WORKDIR /var/www/html
 COPY . .
